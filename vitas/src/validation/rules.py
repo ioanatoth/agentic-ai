@@ -1,58 +1,72 @@
+import pandas as pd
+import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
+
 class LivestockClassifier:
     """
-    Implementează regulile de business pentru clasificarea animalelor (Capitolul 4.7).
+    Implementează regulile de business și validarea conform Specie_Rasa.csv.
     """
 
-    @staticmethod
-    def calculate_age_months(birth_date_str):
-        """Calculează vârsta în luni față de data curentă (Cerința 6.6)."""
+    def __init__(self, reference_csv_path='Specie_Rasa.csv'):
+        # Încărcăm nomenclatorul de specii și rase
         try:
-            birth_date = datetime.strptime(birth_date_str, "%Y-%m-%d")
-            now = datetime.now()
-            diff = relativedelta(now, birth_date)
+            self.ref_data = pd.read_csv(reference_csv_path)
+            self.valid_species = self.ref_data['Specia'].unique().tolist()
+        except Exception as e:
+            print(f"Eroare la încărcarea nomenclatorului: {e}")
+            self.ref_data = pd.DataFrame()
+            self.valid_species = []
+
+    def validate_species_race(self, extracted_species, extracted_race):
+        """
+        Verifică dacă combinația Specie-Rasă este validă (Cerința 6.7)[cite: 1].
+        """
+        if self.ref_data.empty:
+            return True, extracted_species  # Skip dacă nu avem date
+
+        # Normalizare pentru comparare
+        s_norm = str(extracted_species).strip()
+        r_norm = str(extracted_race).strip()
+
+        # Verificăm dacă specia există
+        match = self.ref_data[self.ref_data['Specia'].str.contains(s_norm, case=False, na=False)]
+
+        if match.empty:
+            return False, f"Specie Necunoscută: {extracted_species}"
+
+        # Verificăm dacă rasa aparține speciei respective
+        race_match = match[match['Rasa'].str.contains(r_norm, case=False, na=False)]
+        if race_match.empty:
+            return False, f"Rasă neconformă pentru {extracted_species}: {extracted_race}"
+
+        return True, "Valid"
+
+    def calculate_age_months(self, birth_date_str):
+        """Calculează vârsta în luni (Cerința 6.6)[cite: 1]."""
+        try:
+            # Curățare format dată
+            clean_date = str(birth_date_str).replace('.', '-').replace('/', '-')
+            birth_date = datetime.strptime(clean_date, "%Y-%m-%d")
+            diff = relativedelta(datetime.now(), birth_date)
             return diff.years * 12 + diff.months
         except:
             return None
 
-    def classify_bovine(self, age_months, sex):
-        """Reguli Bovine (Capitolul 4.7)"""
-        if age_months < 12:
-            return "Viței"
-        if sex == "F" and 12 <= age_months <= 24:
-            return "Juninci"
-        if sex == "F" and age_months > 24:
-            return "Bovine productive"
-        if sex == "M" and age_months > 12:
-            return "Masculi"
-        return "Bovine (Alte categorii)"
-
-    def classify_ovine(self, age_months, sex):
-        """Reguli Ovine (Capitolul 4.7)"""
-        if age_months < 6:
-            return "Miei"
-        if sex == "M" and 6 <= age_months <= 12:
-            return "Tineret mascul"
-        if sex == "F" and 6 <= age_months <= 18:
-            return "Oi neintrate în producție"
-        if sex == "F" and age_months > 18:
-            return "Oi productive"
-        if sex == "M" and age_months > 12:
-            return "Berbeci"
-        return "Ovine (Alte categorii)"
-
     def get_category(self, species, birth_date_str, sex):
-        """Determină categoria finală bazată pe specie, sex și vârstă (Cerința 6.6)."""
-        age_months = self.calculate_age_months(birth_date_str)
-        if age_months is None:
-            return "Dată invalidă"
+        """Categorisire bazată pe regulile de business (Capitolul 4.7)[cite: 1]."""
+        age = self.calculate_age_months(birth_date_str)
+        if age is None: return "Dată Invalidă"
 
-        s = species.lower()
+        s = str(species).lower()
         if "bov" in s:
-            return self.classify_bovine(age_months, sex)
+            if age < 12: return "Viței"
+            if sex == "F": return "Juninci" if age <= 24 else "Bovine productive"
+            return "Masculi"
         elif "ovin" in s:
-            return self.classify_ovine(age_months, sex)
-        # Se pot adăuga aici regulile pentru Caprine și Suine similar
-        return f"{species} (Neclasificat)"
+            if age < 6: return "Miei"
+            if sex == "F": return "Oi productive" if age > 18 else "Oi neintrate în producție"
+            return "Berbeci"
+
+        return "Alte categorii"
