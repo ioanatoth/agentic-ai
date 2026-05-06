@@ -106,7 +106,7 @@ if uploaded_files:
                 st.subheader("Animal Master Recordset")
                 st.dataframe(df, use_container_width=True)
 
-                # FR12: Export date
+                # Export date
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label=" Descarcă raport CSV (Animal Master)",
